@@ -54,6 +54,11 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         positions = [positions; x, y, w, h];
     end
 
+    % Function to calculate the distance between two points
+    function dist = calcDistance(x1, y1, x2, y2)
+        dist = sqrt((x1 - x2)^2 + (y1 - y2)^2);
+    end
+
     % Function to check all possible rotations and placements for a rectangle
     function [placed, pos] = tryPlaceRect(w, h, d, positions, isA)
         placed = false;
@@ -87,8 +92,24 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
 
     % Place rectangles B
     for i = 1:numB
-        [placed, posB] = tryPlaceRect(wB, hB, d2, posB, false);
-        if ~placed
+        % Find the closest rectangle A for placement
+        minDist = inf;
+        bestPos = [];
+        for j = 1:size(posA, 1)
+            xA = posA(j, 1); yA = posA(j, 2);
+            [placed, tempPos] = tryPlaceRect(wB, hB, d2, posB, false);
+            if placed
+                xB = tempPos(end, 1); yB = tempPos(end, 2);
+                dist = calcDistance(xA, yA, xB, yB);
+                if dist < minDist
+                    minDist = dist;
+                    bestPos = tempPos;
+                end
+            end
+        end
+        if ~isempty(bestPos)
+            posB = bestPos;
+        else
             error('Cannot place all rectangles B with the given constraints.');
         end
     end
@@ -133,6 +154,10 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     for i = 1:size(posB, 1)
         rectangle('Position', [posB(i, 1), posB(i, 2), posB(i, 3), posB(i, 4)], 'EdgeColor', 'b');
     end
+    % Draw lines connecting corresponding rectangles A and B
+    for i = 1:min(numA, numB)
+        line([posA(i, 1) + posA(i, 3)/2, posB(i, 1) + posB(i, 3)/2], [posA(i, 2) + posA(i, 4)/2, posB(i, 2) + posB(i, 4)/2], 'Color', 'k');
+    end
     hold off;
 end
 
@@ -140,4 +165,3 @@ end
 function overlap = rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2, d)
     overlap = ~(x1 + w1 + d < x2 || x2 + w2 + d < x1 || y1 + h1 + d < y2 || y2 + h2 + d < y1);
 end
-
