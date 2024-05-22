@@ -29,7 +29,7 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     % d1, d2: minimum distance conditions between same type rectangles
     % dAB: minimum distance condition between different type rectangles
     % numA, numB: number of rectangles A and B
-    
+
     % Unpack the rectangle dimensions
     wA = rectA(1); hA = rectA(2);
     wB = rectB(1); hB = rectB(2);
@@ -37,6 +37,12 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     % Initialize lists to store positions
     posA = [];
     posB = [];
+
+    % Initialize boundaries for the containing rectangle
+    minX = inf;
+    minY = inf;
+    maxX = 0;
+    maxY = 0;
 
     % Function to check if a rectangle can be placed at a given position
     function isPlaceable = canPlace(x, y, w, h, positions, minDist)
@@ -82,12 +88,22 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         end
     end
 
+    % Update boundaries of the containing rectangle
+    function updateBounds(x, y, w, h)
+        minX = min(minX, x);
+        minY = min(minY, y);
+        maxX = max(maxX, x + w);
+        maxY = max(maxY, y + h);
+    end
+
     % Place rectangles A
     for i = 1:numA
         [placed, posA] = tryPlaceRect(wA, hA, d1, posA, true);
         if ~placed
             error('Cannot place all rectangles A with the given constraints.');
         end
+        % Update bounds
+        updateBounds(posA(end, 1), posA(end, 2), posA(end, 3), posA(end, 4));
     end
 
     % Place rectangles B
@@ -112,8 +128,10 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         else
             error('Cannot place all rectangles B with the given constraints.');
         end
+        % Update bounds
+        updateBounds(posB(end, 1), posB(end, 2), posB(end, 3), posB(end, 4));
     end
-    
+
     % Ensure minimum distance between A and B
     for i = 1:size(posA, 1)
         for j = 1:size(posB, 1)
@@ -124,27 +142,17 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
             end
         end
     end
-    
+
     % Calculate the used area
-    maxX = 0;
-    maxY = 0;
-    for i = 1:size(posA, 1)
-        maxX = max(maxX, posA(i, 1) + posA(i, 3));
-        maxY = max(maxY, posA(i, 2) + posA(i, 4));
-    end
-    for i = 1:size(posB, 1)
-        maxX = max(maxX, posB(i, 1) + posB(i, 3));
-        maxY = max(maxY, posB(i, 2) + posB(i, 4));
-    end
-    minArea = maxX * maxY;
-    
+    minArea = (maxX - minX) * (maxY - minY);
+
     % Display results
     fprintf('Minimum area required: %d\n', minArea);
     fprintf('Positions of rectangles A:\n');
     disp(posA);
     fprintf('Positions of rectangles B:\n');
     disp(posB);
-    
+
     % Visualization
     figure;
     hold on;
