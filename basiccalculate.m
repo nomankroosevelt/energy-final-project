@@ -34,50 +34,43 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     wA = rectA(1); hA = rectA(2);
     wB = rectB(1); hB = rectB(2);
 
-    % Initialize variables
-    maxWidth = max(wA, wB) * (numA + numB);  % An upper bound on width
-    maxHeight = max(hA, hB) * (numA + numB); % An upper bound on height
-    
-    % Initialize a grid to keep track of placement
-    grid = zeros(maxHeight, maxWidth);
-    
+    % Initialize lists to store positions
+    posA = [];
+    posB = [];
+
     % Function to check if a rectangle can be placed at a given position
-    function canPlace(x, y, w, h, d)
-        if x + w > maxWidth || y + h > maxHeight
-            canPlace = false;
-            return;
+    function isPlaceable = canPlace(x, y, w, h, positions, minDist)
+        isPlaceable = true;
+        for i = 1:size(positions, 1)
+            if rectOverlap(x, y, w, h, positions(i, 1), positions(i, 2), positions(i, 3), positions(i, 4), minDist)
+                isPlaceable = false;
+                return;
+            end
         end
-        if any(grid(y:y+h-1, x:x+w-1), 'all')
-            canPlace = false;
-            return;
-        end
-        if any(grid(max(1, y-d):min(maxHeight, y+h+d-1), max(1, x-d):min(maxWidth, x+w+d-1)), 'all')
-            canPlace = false;
-            return;
-        end
-        canPlace = true;
     end
 
     % Function to place a rectangle at a given position
-    function placeRect(x, y, w, h)
-        grid(y:y+h-1, x:x+w-1) = 1;
+    function positions = placeRect(x, y, w, h, positions)
+        positions = [positions; x, y, w, h];
     end
 
     % Function to check all possible rotations and placements for a rectangle
-    function [placed, pos] = tryPlaceRect(w, h, d)
+    function [placed, pos] = tryPlaceRect(w, h, d, positions, isA)
         placed = false;
         pos = [];
+        maxWidth = (wA + wB) * (numA + numB);
+        maxHeight = (hA + hB) * (numA + numB);
         for y = 1:maxHeight
             for x = 1:maxWidth
-                if canPlace(x, y, w, h, d)
-                    placeRect(x, y, w, h);
-                    pos = [x, y, w, h];
+                if canPlace(x, y, w, h, [posA; posB], d)
+                    positions = placeRect(x, y, w, h, positions);
                     placed = true;
+                    pos = positions;
                     return;
-                elseif canPlace(x, y, h, w, d) % Try rotated
-                    placeRect(x, y, h, w);
-                    pos = [x, y, h, w];
+                elseif canPlace(x, y, h, w, [posA; posB], d) % Try rotated
+                    positions = placeRect(x, y, h, w, positions);
                     placed = true;
+                    pos = positions;
                     return;
                 end
             end
@@ -85,23 +78,17 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     end
 
     % Place rectangles A
-    posA = [];
     for i = 1:numA
-        [placed, pos] = tryPlaceRect(wA, hA, d1);
-        if placed
-            posA = [posA; pos];
-        else
+        [placed, posA] = tryPlaceRect(wA, hA, d1, posA, true);
+        if ~placed
             error('Cannot place all rectangles A with the given constraints.');
         end
     end
 
     % Place rectangles B
-    posB = [];
     for i = 1:numB
-        [placed, pos] = tryPlaceRect(wB, hB, d2);
-        if placed
-            posB = [posB; pos];
-        else
+        [placed, posB] = tryPlaceRect(wB, hB, d2, posB, false);
+        if ~placed
             error('Cannot place all rectangles B with the given constraints.');
         end
     end
@@ -118,9 +105,17 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     end
     
     % Calculate the used area
-    usedHeight = find(any(grid, 2), 1, 'last');
-    usedWidth = find(any(grid, 1), 1, 'last');
-    minArea = usedHeight * usedWidth;
+    maxX = 0;
+    maxY = 0;
+    for i = 1:size(posA, 1)
+        maxX = max(maxX, posA(i, 1) + posA(i, 3));
+        maxY = max(maxY, posA(i, 2) + posA(i, 4));
+    end
+    for i = 1:size(posB, 1)
+        maxX = max(maxX, posB(i, 1) + posB(i, 3));
+        maxY = max(maxY, posB(i, 2) + posB(i, 4));
+    end
+    minArea = maxX * maxY;
     
     % Display results
     fprintf('Minimum area required: %d\n', minArea);
@@ -131,7 +126,6 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     
     % Visualization
     figure;
-    imshow(grid);
     hold on;
     for i = 1:size(posA, 1)
         rectangle('Position', [posA(i, 1), posA(i, 2), posA(i, 3), posA(i, 4)], 'EdgeColor', 'r');
@@ -146,3 +140,4 @@ end
 function overlap = rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2, d)
     overlap = ~(x1 + w1 + d < x2 || x2 + w2 + d < x1 || y1 + h1 + d < y2 || y2 + h2 + d < y1);
 end
+
