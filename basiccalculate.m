@@ -20,15 +20,18 @@ d2 = 2800;
 dAB = 2000; 
 numA = max_elec_need/max_elec_storage; 
 numB = numA; 
+lineCost = 100;
+areaCost = 30;
+minCostPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost);
 
-minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB);
 
-
-function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
+function minCostPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost)
     % rectA, rectB: [width, height] of the rectangles A and B
     % d1, d2: minimum distance conditions between same type rectangles
     % dAB: minimum distance condition between different type rectangles
     % numA, numB: number of rectangles A and B
+    % lineCost: unit cost of the length of the lines connecting rectangles
+    % areaCost: unit cost of the area of the enclosing rectangle
 
     % Unpack the rectangle dimensions
     wA = rectA(1); hA = rectA(2);
@@ -65,30 +68,19 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         dist = sqrt((x1 - x2)^2 + (y1 - y2)^2);
     end
 
-    % Function to check all possible rotations and placements for a rectangle
-    function [placed, pos] = tryPlaceRect(w, h, d, positions, isA)
-        placed = false;
-        pos = [];
-        maxWidth = (wA + wB) * (numA + numB);
-        maxHeight = (hA + hB) * (numA + numB);
-        for y = 1:maxHeight
-            for x = 1:maxWidth
-                if canPlace(x, y, w, h, [posA; posB], d)
-                    positions = placeRect(x, y, w, h, positions);
-                    placed = true;
-                    pos = positions;
-                    return;
-                elseif canPlace(x, y, h, w, [posA; posB], d) % Try rotated
-                    positions = placeRect(x, y, h, w, positions);
-                    placed = true;
-                    pos = positions;
-                    return;
-                end
-            end
+    % Function to calculate total line length between corresponding rectangles A and B
+    function totalLength = calcTotalLineLength()
+        totalLength = 0;
+        for i = 1:min(size(posA, 1), size(posB, 1))
+            xA = posA(i, 1) + posA(i, 3)/2;
+            yA = posA(i, 2) + posA(i, 4)/2;
+            xB = posB(i, 1) + posB(i, 3)/2;
+            yB = posB(i, 2) + posB(i, 4)/2;
+            totalLength = totalLength + calcDistance(xA, yA, xB, yB);
         end
     end
 
-    % Update boundaries of the containing rectangle
+    % Function to update boundaries of the containing rectangle
     function updateBounds(x, y, w, h)
         minX = min(minX, x);
         minY = min(minY, y);
@@ -96,14 +88,53 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         maxY = max(maxY, y + h);
     end
 
+    % Function to calculate the enclosing rectangle area
+    function area = calcEnclosingRectangleArea()
+        area = (maxX - minX) * (maxY - minY);
+    end
+
+    % Function to calculate the total cost (line cost + area cost)
+    function cost = calcTotalCost()
+        lineLength = calcTotalLineLength();
+        enclosingArea = calcEnclosingRectangleArea();
+        cost = lineLength * lineCost + enclosingArea * areaCost;
+    end
+
+    % Function to try all possible rotations and placements for a rectangle
+    function [bestPos, bestCost] = tryPlaceRect(w, h, d, positions, isA)
+        bestPos = positions;
+        bestCost = inf;
+        maxWidth = (wA + wB) * (numA + numB);
+        maxHeight = (hA + hB) * (numA + numB);
+        for y = 1:maxHeight
+            for x = 1:maxWidth
+                if canPlace(x, y, w, h, [posA; posB], d)
+                    tempPositions = placeRect(x, y, w, h, positions);
+                    updateBounds(x, y, w, h);
+                    cost = calcTotalCost();
+                    if cost < bestCost
+                        bestCost = cost;
+                        bestPos = tempPositions;
+                    end
+                elseif canPlace(x, y, h, w, [posA; posB], d) % Try rotated
+                    tempPositions = placeRect(x, y, h, w, positions);
+                    updateBounds(x, y, h, w);
+                    cost = calcTotalCost();
+                    if cost < bestCost
+                        bestCost = cost;
+                        bestPos = tempPositions;
+                    end
+                end
+            end
+        end
+    end
+
     % Place rectangles A
     for i = 1:numA
-        [placed, posA] = tryPlaceRect(wA, hA, d1, posA, true);
-        if ~placed
+        [posA, ~] = tryPlaceRect(wA, hA, d1, posA, true);
+        if isempty(posA)
             error('Cannot place all rectangles A with the given constraints.');
         end
-        % Update bounds
-        updateBounds(posA(end, 1), posA(end, 2), posA(end, 3), posA(end, 4));
     end
 
     % Place rectangles B
@@ -113,8 +144,8 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         bestPos = [];
         for j = 1:size(posA, 1)
             xA = posA(j, 1); yA = posA(j, 2);
-            [placed, tempPos] = tryPlaceRect(wB, hB, d2, posB, false);
-            if placed
+            [tempPos, ~] = tryPlaceRect(wB, hB, d2, posB, false);
+            if ~isempty(tempPos)
                 xB = tempPos(end, 1); yB = tempPos(end, 2);
                 dist = calcDistance(xA, yA, xB, yB);
                 if dist < minDist
@@ -128,8 +159,6 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
         else
             error('Cannot place all rectangles B with the given constraints.');
         end
-        % Update bounds
-        updateBounds(posB(end, 1), posB(end, 2), posB(end, 3), posB(end, 4));
     end
 
     % Ensure minimum distance between A and B
@@ -144,10 +173,10 @@ function minAreaPackingWithRotation(rectA, rectB, d1, d2, dAB, numA, numB)
     end
 
     % Calculate the used area
-    minArea = (maxX - minX) * (maxY - minY);
+    minArea = calcEnclosingRectangleArea();
 
     % Display results
-    fprintf('Minimum area required: %d\n', minArea);
+    fprintf('Minimum cost required: %d\n', calcTotalCost());
     fprintf('Positions of rectangles A:\n');
     disp(posA);
     fprintf('Positions of rectangles B:\n');
@@ -173,3 +202,4 @@ end
 function overlap = rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2, d)
     overlap = ~(x1 + w1 + d < x2 || x2 + w2 + d < x1 || y1 + h1 + d < y2 || y2 + h2 + d < y1);
 end
+
