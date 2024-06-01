@@ -26,6 +26,104 @@ populationSize = 20000;
 generations = 2000000000000000;
 optimizedPackingGA(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, populationSize, generations);
 
+%% Main calculate
+% data set
+battery_cost_per_kWh = 1500; % 电池成本（元/kWh）
+installation_cost_per_MWh = 100000; % 安装费用（元/MWh）
+boost_device_cost_per_MWh = 200000; % 升压装置费用（元/MWh）
+design_cost = 2000000; % 项目设计费（元）
+land_cost_per_sqm = 500; % 工业用地成本（元/平方米）
+land_area_sqm = 1000; % 占地面积（平方米）
+system_capacity_MWh = 100; % 系统容量（MWh）
+operation_maintenance_cost_per_year = 2000000; % 运维费用（元/年）
+operation_days_per_year = 330; % 每年使用天数
+operation_years = 10; % 运行年限
+discount_rate = 0.05; % 折现率
+
+% 电价参数
+valley_price = 0.31; % 谷电电价（元/kWh）
+peak_price = 1.15; % 峰电电价（元/kWh）
+flat_price = 0.61; % 平电电价（元/kWh）
+
+% 电池舱参数
+battery_capacity_per_cabin_MWh = 2.5; % 每个电池舱容量（MWh）
+battery_power_per_cabin_MW = 1.25; % 每个电池舱额定功率（MW）
+battery_efficiency = 0.83; % 电池效率
+
+% 计算电池舱数量
+num_cabins = system_capacity_MWh / battery_capacity_per_cabin_MWh;
+
+% 计算总投资成本
+battery_cost = battery_cost_per_kWh * system_capacity_MWh * 1000; % 电池成本
+installation_cost = installation_cost_per_MWh * system_capacity_MWh; % 安装费用
+boost_device_cost = boost_device_cost_per_MWh * system_capacity_MWh; % 升压装置费用
+land_cost = land_cost_per_sqm * land_area_sqm; % 占地成本
+total_investment_cost = battery_cost + installation_cost + boost_device_cost + design_cost + land_cost;
+
+% 计算运维总成本
+total_maintenance_cost = operation_maintenance_cost_per_year * operation_years;
+
+% 两种模式下的收入和成本计算
+% 模式1：一天两充两放
+capacity_degradation_per_year_mode1 = 3.5; % 容量每年衰减（MWh）
+charge_discharge_cycles_per_day_mode1 = 2;
+annual_revenue_mode1 = zeros(1, operation_years);
+for year = 1:operation_years
+    effective_capacity = system_capacity_MWh - capacity_degradation_per_year_mode1 * year;
+    daily_revenue = ((effective_capacity * battery_efficiency * peak_price) - (effective_capacity * valley_price)) * charge_discharge_cycles_per_day_mode1;
+    annual_revenue_mode1(year) = daily_revenue * operation_days_per_year;
+end
+total_revenue_mode1 = sum(annual_revenue_mode1); % 总收入
+payback_years_mode1 = find(cumsum(annual_revenue_mode1) >= total_investment_cost + total_maintenance_cost, 1); % 回本年限
+net_profit_mode1 = total_revenue_mode1 - total_investment_cost - total_maintenance_cost; % 总收益
+
+% 模式2：一天一充一放
+capacity_degradation_per_year_mode2 = 2; % 容量每年衰减（MWh）
+charge_discharge_cycles_per_day_mode2 = 1;
+annual_revenue_mode2 = zeros(1, operation_years);
+for year = 1:operation_years
+    effective_capacity = system_capacity_MWh - capacity_degradation_per_year_mode2 * year;
+    daily_revenue = ((effective_capacity * battery_efficiency * peak_price) - (effective_capacity * valley_price)) * charge_discharge_cycles_per_day_mode2;
+    annual_revenue_mode2(year) = daily_revenue * operation_days_per_year;
+end
+total_revenue_mode2 = sum(annual_revenue_mode2); % 总收入
+payback_years_mode2 = find(cumsum(annual_revenue_mode2) >= total_investment_cost + total_maintenance_cost, 1); % 回本年限
+net_profit_mode2 = total_revenue_mode2 - total_investment_cost - total_maintenance_cost; % 总收益
+
+% 考虑折现率后的回本年限和总收益计算
+discount_factors = 1 ./ (1 + discount_rate) .^ (1:operation_years);
+
+% 模式1折现后的计算
+discounted_annual_revenue_mode1 = annual_revenue_mode1 .* discount_factors;
+discounted_total_revenue_mode1 = sum(discounted_annual_revenue_mode1);
+discounted_total_investment_cost = total_investment_cost + total_maintenance_cost;
+discounted_net_profit_mode1 = discounted_total_revenue_mode1 - discounted_total_investment_cost;
+
+% 模式2折现后的计算
+discounted_annual_revenue_mode2 = annual_revenue_mode2 .* discount_factors;
+discounted_total_revenue_mode2 = sum(discounted_annual_revenue_mode2);
+discounted_total_investment_cost = total_investment_cost + total_maintenance_cost;
+discounted_net_profit_mode2 = discounted_total_revenue_mode2 - discounted_total_investment_cost;
+
+% 显示结果
+fprintf('模式1（一天两充两放）：\n');
+fprintf('总投资成本：%.2f元\n', total_investment_cost);
+fprintf('运维总成本：%.2f元\n', total_maintenance_cost);
+fprintf('总收入：%.2f元\n', total_revenue_mode1);
+fprintf('回本年限：%d年\n', payback_years_mode1);
+fprintf('总收益：%.2f元\n', net_profit_mode1);
+fprintf('折现后总收益：%.2f元\n', discounted_net_profit_mode1);
+
+fprintf('\n模式2（一天一充一放）：\n');
+fprintf('总投资成本：%.2f元\n', total_investment_cost);
+fprintf('运维总成本：%.2f元\n', total_maintenance_cost);
+fprintf('总收入：%.2f元\n', total_revenue_mode2);
+fprintf('回本年限：%d年\n', payback_years_mode2);
+fprintf('总收益：%.2f元\n', net_profit_mode2);
+fprintf('折现后总收益：%.2f元\n', discounted_net_profit_mode2);
+
+%% Functions
+
 function optimizedPackingGA(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, populationSize, generations)
     % Define gene encoding: Each gene represents a rectangle
     geneLength = numA + numB;
