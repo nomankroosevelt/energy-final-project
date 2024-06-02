@@ -15,6 +15,7 @@ target_Wh = 12.5*1000000;   % 目标能量（Wh）
 fprintf('电池数量: %d\n', num_batteries);
 fprintf('总能量（Wh）: %d\n', total_energy);
 fprintf('总价格: $%.2f\n', total_price);
+fprintf('千瓦时价格: $%.2f\n', total_price/target_Wh);
 
 function [num_batteries, total_energy, total_price] = calculate_battery_count(target_P, target_S, target_Wh, battery_P, battery_S, battery_Wh, battery_price)
     % 计算每个电池串联数量

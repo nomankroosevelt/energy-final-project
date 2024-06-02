@@ -21,19 +21,21 @@ dAB = 2;
 numA = max_elec_need/max_elec_storage; 
 numB = numA; 
 lineCost = 10;
-areaCost = 300;
-populationSize = 20000;
-generations = 2000000000000000;
-optimizedPackingGA(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, populationSize, generations);
+areaCost = 1500;
+maxIterations = 20000;
+initialTemp = 10000;
+coolingRate = 0.50;
+optimizedPackingSimulatedAnnealing(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, maxIterations, initialTemp, coolingRate)
 
 %% Main calculate
-% data set
-battery_cost_per_kWh = 1500; % 电池成本（元/kWh）
+% 参数设置 
+global bestCost;
+battery_cost_per_kWh = 0.37; % 电池成本（元/kWh）
 installation_cost_per_MWh = 100000; % 安装费用（元/MWh）
 boost_device_cost_per_MWh = 200000; % 升压装置费用（元/MWh）
 design_cost = 2000000; % 项目设计费（元）
-land_cost_per_sqm = 500; % 工业用地成本（元/平方米）
-land_area_sqm = 1000; % 占地面积（平方米）
+land_cost_per_sqm = 1500; % 工业用地成本（元/平方米）
+land_area_sqm = 1904.8; % 占地面积（平方米）
 system_capacity_MWh = 100; % 系统容量（MWh）
 operation_maintenance_cost_per_year = 2000000; % 运维费用（元/年）
 operation_days_per_year = 330; % 每年使用天数
@@ -54,10 +56,11 @@ battery_efficiency = 0.83; % 电池效率
 num_cabins = system_capacity_MWh / battery_capacity_per_cabin_MWh;
 
 % 计算总投资成本
-battery_cost = battery_cost_per_kWh * system_capacity_MWh * 1000; % 电池成本
+battery_cost = battery_cost_per_kWh * system_capacity_MWh * 1000; % 电池成本（从MWh转换为kWh）
 installation_cost = installation_cost_per_MWh * system_capacity_MWh; % 安装费用
 boost_device_cost = boost_device_cost_per_MWh * system_capacity_MWh; % 升压装置费用
-land_cost = land_cost_per_sqm * land_area_sqm; % 占地成本
+%land_cost = land_cost_per_sqm * land_area_sqm; % 占地成本
+land_cost = bestCost;
 total_investment_cost = battery_cost + installation_cost + boost_device_cost + design_cost + land_cost;
 
 % 计算运维总成本
@@ -70,7 +73,7 @@ charge_discharge_cycles_per_day_mode1 = 2;
 annual_revenue_mode1 = zeros(1, operation_years);
 for year = 1:operation_years
     effective_capacity = system_capacity_MWh - capacity_degradation_per_year_mode1 * year;
-    daily_revenue = ((effective_capacity * battery_efficiency * peak_price) - (effective_capacity * valley_price)) * charge_discharge_cycles_per_day_mode1;
+    daily_revenue = ((effective_capacity * 1000 * battery_efficiency * peak_price) - (effective_capacity * 1000 * valley_price)) * charge_discharge_cycles_per_day_mode1; % 单位转换为kWh
     annual_revenue_mode1(year) = daily_revenue * operation_days_per_year;
 end
 total_revenue_mode1 = sum(annual_revenue_mode1); % 总收入
@@ -83,7 +86,7 @@ charge_discharge_cycles_per_day_mode2 = 1;
 annual_revenue_mode2 = zeros(1, operation_years);
 for year = 1:operation_years
     effective_capacity = system_capacity_MWh - capacity_degradation_per_year_mode2 * year;
-    daily_revenue = ((effective_capacity * battery_efficiency * peak_price) - (effective_capacity * valley_price)) * charge_discharge_cycles_per_day_mode2;
+    daily_revenue = ((effective_capacity * 1000 * battery_efficiency * peak_price) - (effective_capacity * 1000 * valley_price)) * charge_discharge_cycles_per_day_mode2; % 单位转换为kWh
     annual_revenue_mode2(year) = daily_revenue * operation_days_per_year;
 end
 total_revenue_mode2 = sum(annual_revenue_mode2); % 总收入
@@ -124,43 +127,86 @@ fprintf('折现后总收益：%.2f元\n', discounted_net_profit_mode2);
 
 %% Functions
 
-function optimizedPackingGA(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, populationSize, generations)
-    % Define gene encoding: Each gene represents a rectangle
-    geneLength = numA + numB;
+function [bestArrangement, bestCost, bestLineCost, bestAreaCost] = optimizedPackingSimulatedAnnealing(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, maxIterations, initialTemp, coolingRate)
+    global bestCost;
+    % Generate initial solution
+    arrangement = initializeArrangement(rectA, rectB, numA, numB, dAB);
     
-    % Generate initial population
-    population = initializePopulation(populationSize, geneLength);
+    % Calculate initial cost
+    [bestCost, bestLineCost, bestAreaCost] = calculateCost(arrangement, d1, d2, lineCost, areaCost);
     
-    % Evolve the population through generations
-    for gen = 1:generations
-        % Evaluate fitness
-        [fitness, totalCosts] = evaluateFitness(population, rectA, rectB, d1, d2, dAB, lineCost, areaCost);
+    bestArrangement = arrangement;
+    currentCost = bestCost;
+    currentArrangement = arrangement;
+    
+    % Initialize array to record best cost history
+    bestCostHistory = zeros(maxIterations, 1);
+    bestCostHistory(1) = bestCost;
+    
+    % Simulated Annealing process
+    temp = initialTemp;
+    for iter = 1:maxIterations
+        % Generate a neighbor solution
+        newArrangement = generateNeighbor(currentArrangement, rectA, rectB, dAB);
         
-        % Select parents
-        parents = selectParents(population, fitness, 2);
+        % Calculate cost of new arrangement
+        [newCost, newLineCost, newAreaCost] = calculateCost(newArrangement, d1, d2, lineCost, areaCost);
         
-        % Crossover
-        offspring = crossover(parents);
+        % Acceptance probability
+        if newCost < currentCost
+            acceptProbability = 1;
+        else
+            acceptProbability = exp((currentCost - newCost) / temp);
+        end
         
-        % Mutation
-        offspring = mutate(offspring);
+        % Accept or reject the new arrangement
+        if rand < acceptProbability
+            currentArrangement = newArrangement;
+            currentCost = newCost;
+            currentLineCost = newLineCost;
+            currentAreaCost = newAreaCost;
+        end
         
-        % Replace the old population with offspring
-        population = offspring;
+        % Update best solution
+        if currentCost < bestCost
+            bestArrangement = currentArrangement;
+            bestCost = currentCost;
+            bestLineCost = currentLineCost;
+            bestAreaCost = currentAreaCost;
+        end
+        
+        % Record the best cost in history
+        bestCostHistory(iter) = bestCost;
+        
+        % Cool down
+        temp = temp * coolingRate;
+        
+        % Display current iteration and cost
+        fprintf('Iteration %d, Best Cost: %.2f\n', iter, bestCost);
     end
     
-    % Select the best solution from the final population
-    [bestSolution, bestCost, bestLineCost, bestAreaCost] = selectBestSolution(population, rectA, rectB, d1, d2, dAB, lineCost, areaCost);
-    
     % Plot the best solution
-    plotRectangles(bestSolution, bestCost);
+    plotRectangles(bestArrangement, bestCost);
     
     % Display the best solution
     disp('Best solution:');
-    disp(bestSolution);
+    disp(bestArrangement);
     fprintf('Total cost of the best solution: %.2f\n', bestCost);
     fprintf('Total line cost of the best solution: %.2f\n', bestLineCost);
     fprintf('Total area cost of the best solution: %.2f\n', bestAreaCost);
+    
+    % Plot the best cost history
+    figure;
+    plot(1:maxIterations, bestCostHistory);
+    xlabel('Iteration');
+    ylabel('Best Cost');
+    title('Best Cost vs. Iteration');
+
+    % Return the best solution and its costs
+    bestArrangement = bestArrangement;
+    bestCost = bestCost;
+    bestLineCost = bestLineCost;
+    bestAreaCost = bestAreaCost;
 end
 
 function plotRectangles(arrangement, totalCost)
@@ -186,45 +232,10 @@ function plotRectangles(arrangement, totalCost)
     title(['Total cost: ', num2str(totalCost)]);
 end
 
-function [fitness, totalCosts] = evaluateFitness(population, rectA, rectB, d1, d2, dAB, lineCost, areaCost)
-    fitness = zeros(size(population, 1), 1);
-    totalCosts = zeros(size(population, 1), 3); % [totalCost, lineCost, areaCost]
-    for i = 1:size(population, 1)
-        % Decode the gene to obtain the arrangement of rectangles
-        arrangement = decodeGene(population(i, :), rectA, rectB);
-        
-        % Calculate the fitness based on the arrangement
-        [fitness(i), totalCosts(i, 1), totalCosts(i, 2), totalCosts(i, 3)] = calculateFitness(arrangement, d1, d2, dAB, lineCost, areaCost);
-    end
-end
-
-function [bestSolution, bestCost, bestLineCost, bestAreaCost] = selectBestSolution(population, rectA, rectB, d1, d2, dAB, lineCost, areaCost)
-    [fitness, totalCosts] = evaluateFitness(population, rectA, rectB, d1, d2, dAB, lineCost, areaCost);
-    [~, bestIndex] = max(fitness);
-    bestSolution = decodeGene(population(bestIndex, :), rectA, rectB);
-    bestCost = totalCosts(bestIndex, 1);
-    bestLineCost = totalCosts(bestIndex, 2);
-    bestAreaCost = totalCosts(bestIndex, 3);
-end
-
-function [fitness, totalCost, totalLineCost, totalAreaCost] = calculateFitness(arrangement, d1, d2, dAB, lineCost, areaCost)
-    % Calculate fitness based on the arrangement
+function [totalCost, totalLineCost, totalAreaCost] = calculateCost(arrangement, d1, d2, lineCost, areaCost)
+    % Initialize costs
     totalLineCost = 0;
     totalAreaCost = 0;
-    overlapPenalty = 1e6; % Large penalty for overlapping rectangles
-
-    % Check for overlaps and calculate total line cost and total area cost
-    for i = 1:numel(arrangement)
-        for j = i+1:numel(arrangement)
-            if isOverlapping(arrangement{i}, arrangement{j})
-                totalCost = overlapPenalty; % Penalize heavily for overlap
-                fitness = 1 / totalCost; 
-                totalLineCost = overlapPenalty; % Assign large values to costs
-                totalAreaCost = overlapPenalty;
-                return;
-            end
-        end
-    end
     
     % Calculate total line cost and total area cost
     for i = 1:2:numel(arrangement)-1
@@ -232,17 +243,17 @@ function [fitness, totalCost, totalLineCost, totalAreaCost] = calculateFitness(a
         yA = arrangement{i}(2) + arrangement{i}(4)/2;
         xB = arrangement{i+1}(1) + arrangement{i+1}(3)/2;
         yB = arrangement{i+1}(2) + arrangement{i+1}(4)/2;
+        
         totalLineCost = totalLineCost + sqrt((xA - xB)^2 + (yA - yB)^2);
         totalAreaCost = totalAreaCost + (arrangement{i}(3) * arrangement{i}(4) + arrangement{i+1}(3) * arrangement{i+1}(4));
     end
+    
     % Calculate total cost
     totalCost = totalLineCost * lineCost + totalAreaCost * areaCost;
-    % Fitness is the inverse of total cost
-    fitness = 1 / totalCost;
 end
 
-function isOverlap = isOverlapping(rect1, rect2)
-    % Check if two rectangles overlap
+function isOverlap = isOverlapping(rect1, rect2, minDist)
+    % Check if two rectangles overlap with a minimum distance
     x1 = rect1(1);
     y1 = rect1(2);
     w1 = rect1(3);
@@ -253,57 +264,86 @@ function isOverlap = isOverlapping(rect1, rect2)
     w2 = rect2(3);
     h2 = rect2(4);
     
-    if x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2
-        isOverlap = true;
-    else
-        isOverlap = false;
-    end
+    isOverlap = ~(x1 + w1 + minDist < x2 || x2 + w2 + minDist < x1 || y1 + h1 + minDist < y2 || y2 + h2 + minDist < y1);
 end
 
-function population = initializePopulation(populationSize, geneLength)
-    % Randomly initialize the population
-    population = randi([0, 1], populationSize, geneLength);
-end
-
-function parents = selectParents(population, fitness, numParents)
-    [~, sortedIndices] = sort(fitness, 'descend');
-    parents = population(sortedIndices(1:numParents), :);
-end
-
-function offspring = crossover(parents)
-    % Simple one-point crossover
-    crossoverPoint = randi(size(parents, 2));
-    offspring = parents;
-    for i = 1:size(parents, 1)
-        if mod(i, 2) == 0
-            offspring(i, crossoverPoint:end) = parents(mod(i+1, size(parents, 1))+1, crossoverPoint:end);
+function intersects = isLineIntersectingAnyRect(arrangement, point1, point2)
+    % Check if a line intersects with any rectangles in the arrangement
+    intersects = false;
+    for i = 1:numel(arrangement)
+        rect = arrangement{i};
+        if isLineIntersectingRect(rect, point1, point2)
+            intersects = true;
+            return;
         end
     end
 end
 
-function mutatedOffspring = mutate(offspring)
-    mutationRate = 0.1;
-    mutatedOffspring = offspring;
-    for i = 1:size(offspring, 1)
-        for j = 1:size(offspring, 2)
-            if rand < mutationRate
-                mutatedOffspring(i, j) = ~mutatedOffspring(i, j);
+function intersects = isLineIntersectingRect(rect, point1, point2)
+    % Check if a line intersects with a rectangle
+    x1 = rect(1);
+    y1 = rect(2);
+    x2 = rect(1) + rect(3);
+    y2 = rect(2) + rect(4);
+    
+    % Check all four edges of the rectangle
+    intersects = lineIntersect([x1, y1], [x2, y1], point1, point2) || ...
+                 lineIntersect([x2, y1], [x2, y2], point1, point2) || ...
+                 lineIntersect([x2, y2], [x1, y2], point1, point2) || ...
+                 lineIntersect([x1, y2], [x1, y1], point1, point2);
+end
+
+function intersects = lineIntersect(p1, p2, q1, q2)
+    % Check if two line segments [p1, p2] and [q1, q2] intersect
+    d = (q2(2) - q1(2)) * (p2(1) - p1(1)) - (q2(1) - q1(1)) * (p2(2) - p1(2));
+    if d == 0
+        intersects = false;
+        return;
+    end
+    u = ((q1(1) - p1(1)) * (p2(2) - p1(2)) - (q1(2) - p1(2)) * (p2(1) - p1(1))) / d;
+    t = ((q1(1) - p1(1)) * (q2(2) - q1(2)) - (q1(2) - p1(2)) * (q2(1) - q1(1))) / d;
+    intersects = (u >= 0 && u <= 1 && t >= 0 && t <= 1);
+end
+
+function arrangement = initializeArrangement(rectA, rectB, numA, numB, dAB)
+    % Randomly initialize the arrangement of rectangles with overlap detection
+    arrangement = cell(1, numA + numB);
+    for i = 1:numA
+        while true
+            x = rand * 100;
+            y = rand * 100;
+            newRect = [x, y, rectA(1), rectA(2)];
+            if ~any(cellfun(@(r) isOverlapping(r, newRect, dAB), arrangement(1:i-1)))
+                arrangement{i} = newRect;
+                break;
+            end
+        end
+    end
+    for i = numA+1:numA+numB
+        while true
+            x = rand * 100;
+            y = rand * 100;
+            newRect = [x, y, rectB(1), rectB(2)];
+            if ~any(cellfun(@(r) isOverlapping(r, newRect, dAB), arrangement(1:i-1)))
+                arrangement{i} = newRect;
+                break;
             end
         end
     end
 end
 
-function arrangement = decodeGene(gene, rectA, rectB)
-    numA = sum(gene);
-    numB = length(gene) - numA;
-    arrangement = cell(1, numA + numB);
-    index = 1;
-    for i = 1:numA
-        arrangement{index} = [rand * 100, rand * 100, rectA]; % Random position for demonstration
-        index = index + 1;
-    end
-    for i = 1:numB
-        arrangement{index} = [rand * 100, rand * 100, rectB]; % Random position for demonstration
-        index = index + 1;
+function newArrangement = generateNeighbor(currentArrangement, rectA, rectB, dAB)
+    % Generate a neighbor arrangement by perturbing the current arrangement
+    newArrangement = currentArrangement;
+    idx = randi(length(currentArrangement));
+    for attempt = 1:100  % Try up to 100 times to find a non-overlapping position
+        newX = newArrangement{idx}(1) + randn;
+        newY = newArrangement{idx}(2) + randn;
+        newRect = [newX, newY, newArrangement{idx}(3), newArrangement{idx}(4)];
+        if ~any(cellfun(@(r) isOverlapping(r, newRect, dAB), newArrangement(1:idx-1))) && ...
+           ~any(cellfun(@(r) isOverlapping(r, newRect, dAB), newArrangement(idx+1:end)))
+            newArrangement{idx} = newRect;
+            break;
+        end
     end
 end
