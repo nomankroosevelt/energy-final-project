@@ -1,30 +1,43 @@
 clear all; clc;
-%% Basic electric numbers
+%% Read input from Excel
+inputFile = 'Basic_calculate_input.xlsx';
+data = readtable(inputFile);
 
-elec_price_max = 1.15;%kwh
-elec_price_mid = 0.61;%kwh
-elec_price_low = 0.31;%kwh
-
-max_elec_storage = 2500;%kwh
-max_io_speed = 1250;
-io_efficiency = 0.83;
-
-max_elec_need = 100000;
+%% Extract input data from table
+elec_price_max = data.elec_price_max;
+elec_price_mid = data.elec_price_mid;
+elec_price_low = data.elec_price_low;
+max_elec_storage = data.max_elec_storage;
+max_io_speed = data.max_io_speed;
+io_efficiency = data.io_efficiency;
+max_elec_need = data.max_elec_need;
+rectA = [data.rectA_length, data.rectA_width]; 
+rectB = [data.rectB_length, data.rectB_width]; 
+d1 = data.d1; 
+d2 = data.d2; 
+dAB = data.dAB; 
+numA = max_elec_need/max_elec_storage; 
+numB = numA; 
+lineCost = data.lineCost;
+areaCost = data.areaCost;
+maxIterations = data.maxIterations;
+initialTemp = data.initialTemp;
+coolingRate = data.coolingRate;
 
 %% smallest area calculate
 
-rectA = [9.8, 3.4]; 
-rectB = [5.5, 2.6]; 
-d1 = 2; 
-d2 = 2.8; 
-dAB = 2; 
-numA = max_elec_need/max_elec_storage; 
-numB = numA; 
-lineCost = 10;
-areaCost = 1500;
-maxIterations = 20000;
-initialTemp = 10000;
-coolingRate = 0.50;
+% rectA = [9.8, 3.4]; 
+% rectB = [5.5, 2.6]; 
+% d1 = 2; 
+% d2 = 2.8; 
+% dAB = 2; 
+% numA = max_elec_need/max_elec_storage; 
+% numB = numA; 
+% lineCost = 10;
+% areaCost = 1500;
+% maxIterations = 1000000;
+% initialTemp = 10000;
+% coolingRate = 0.50;
 optimizedPackingSimulatedAnnealing(rectA, rectB, d1, d2, dAB, numA, numB, lineCost, areaCost, maxIterations, initialTemp, coolingRate)
 
 %% Main calculate
@@ -108,22 +121,25 @@ discounted_total_revenue_mode2 = sum(discounted_annual_revenue_mode2);
 discounted_total_investment_cost = total_investment_cost + total_maintenance_cost;
 discounted_net_profit_mode2 = discounted_total_revenue_mode2 - discounted_total_investment_cost;
 
-% 显示结果
-fprintf('模式1（一天两充两放）：\n');
-fprintf('总投资成本：%.2f元\n', total_investment_cost);
-fprintf('运维总成本：%.2f元\n', total_maintenance_cost);
-fprintf('总收入：%.2f元\n', total_revenue_mode1);
-fprintf('回本年限：%d年\n', payback_years_mode1);
-fprintf('总收益：%.2f元\n', net_profit_mode1);
-fprintf('折现后总收益：%.2f元\n', discounted_net_profit_mode1);
+% 输出结果到文件
+outputFile = 'Basic_calculate_output.txt';
+fid = fopen(outputFile, 'w');
+fprintf(fid, '模式1（一天两充两放）：\n');
+fprintf(fid, '总投资成本：%.2f元\n', total_investment_cost);
+fprintf(fid, '运维总成本：%.2f元\n', total_maintenance_cost);
+fprintf(fid, '总收入：%.2f元\n', total_revenue_mode1);
+fprintf(fid, '回本年限：%d年\n', payback_years_mode1);
+fprintf(fid, '总收益：%.2f元\n', net_profit_mode1);
+fprintf(fid, '折现后总收益：%.2f元\n', discounted_net_profit_mode1);
 
-fprintf('\n模式2（一天一充一放）：\n');
-fprintf('总投资成本：%.2f元\n', total_investment_cost);
-fprintf('运维总成本：%.2f元\n', total_maintenance_cost);
-fprintf('总收入：%.2f元\n', total_revenue_mode2);
-fprintf('回本年限：%d年\n', payback_years_mode2);
-fprintf('总收益：%.2f元\n', net_profit_mode2);
-fprintf('折现后总收益：%.2f元\n', discounted_net_profit_mode2);
+fprintf(fid, '\n模式2（一天一充一放）：\n');
+fprintf(fid, '总投资成本：%.2f元\n', total_investment_cost);
+fprintf(fid, '运维总成本：%.2f元\n', total_maintenance_cost);
+fprintf(fid, '总收入：%.2f元\n', total_revenue_mode2);
+fprintf(fid, '回本年限：%d年\n', payback_years_mode2);
+fprintf(fid, '总收益：%.2f元\n', net_profit_mode2);
+fprintf(fid, '折现后总收益：%.2f元\n', discounted_net_profit_mode2);
+fclose(fid);
 
 %% Functions
 
@@ -229,7 +245,6 @@ function plotRectangles(arrangement, totalCost)
     end
     hold off;
     axis equal;
-    title(['Total cost: ', num2str(totalCost)]);
 end
 
 function [totalCost, totalLineCost, totalAreaCost] = calculateCost(arrangement, d1, d2, lineCost, areaCost)
